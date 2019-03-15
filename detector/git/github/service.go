@@ -2,7 +2,6 @@ package github
 
 import (
 	"context"
-	"net/http"
 	"net/url"
 
 	"github.com/MatousJobanek/build-environment-detector/detector/git"
@@ -18,6 +17,7 @@ type GitService struct {
 	gitSource  *git.Source
 	client     *gogh.Client
 	repository git.Repository
+	filenames  []string
 }
 
 func NewGitServiceIfMatches() git.ServiceCreator {
@@ -31,13 +31,13 @@ func NewGitServiceIfMatches() git.ServiceCreator {
 		}
 
 		if url.Host == githubHost || gitSource.Flavor == githubFlavor {
-			return newGhClient(gitSource, url)
+			return newGhService(gitSource, url)
 		}
 		return nil, nil
 	}
 }
 
-func newGhClient(gitSource *git.Source, url *url.URL) (*GitService, error) {
+func newGhService(gitSource *git.Source, url *url.URL) (*GitService, error) {
 	repository, err := git.NewRepository(gitSource, url)
 	if err != nil {
 		return nil, err
@@ -48,25 +48,43 @@ func newGhClient(gitSource *git.Source, url *url.URL) (*GitService, error) {
 		baseClient.Transport = &gogh.BasicAuthTransport{Username: username, Password: password}
 	}
 	client := gogh.NewClient(baseClient)
-	if err = getBranchRequestErrors(context.Background(), client, repository); err != nil {
+	listOfFiles, err := getListOfFiles(client, repository)
+	if err != nil {
 		return nil, err
 	}
+
 	return &GitService{
 		gitSource:  gitSource,
 		client:     client,
 		repository: repository,
+		filenames:  listOfFiles,
 	}, nil
 }
 
-func (s *GitService) Exists(filePath string) bool {
-	_, _, resp, err := s.client.Repositories.GetContents(
+func getListOfFiles(client *gogh.Client, repository git.Repository) ([]string, error) {
+	tree, _, err := client.Git.GetTree(
 		context.Background(),
-		s.repository.Owner,
-		s.repository.Repository,
-		filePath,
-		&gogh.RepositoryContentGetOptions{Ref: s.repository.Branch})
+		repository.Owner,
+		repository.Repository,
+		repository.Branch,
+		false)
+	if err != nil {
+		return nil, err
+	}
+	var filenames []string
+	for _, entry := range tree.Entries {
+		filenames = append(filenames, *entry.Path)
+	}
+	return filenames, nil
+}
 
-	return err == nil && resp != nil && resp.StatusCode == http.StatusOK
+func (s *GitService) Exists(filePath string) bool {
+	for _, file := range s.filenames {
+		if filePath == file {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *GitService) GetLanguageList() ([]string, error) {
@@ -80,9 +98,4 @@ func (s *GitService) GetLanguageList() ([]string, error) {
 	}
 
 	return git.GetSortedLanguages(languages), nil
-}
-
-func getBranchRequestErrors(ctx context.Context, client *gogh.Client, repository git.Repository) error {
-	_, _, err := client.Repositories.GetBranch(ctx, repository.Owner, repository.Repository, repository.Branch)
-	return err
 }

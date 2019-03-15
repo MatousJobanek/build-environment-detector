@@ -2,7 +2,6 @@ package gitlab
 
 import (
 	"fmt"
-	"net/http"
 	"net/url"
 	"sort"
 
@@ -19,6 +18,7 @@ type GitService struct {
 	gitSource  *git.Source
 	client     *gogl.Client
 	repository git.Repository
+	fileNames  []string
 }
 
 func NewGitServiceIfMatches() git.ServiceCreator {
@@ -54,7 +54,7 @@ func newGhClient(gitSource *git.Source, url *url.URL) (*GitService, error) {
 			return nil, err
 		}
 	}
-	err = getBranchRequestErrors(client, repository)
+	fileNames, err := getListOfFiles(client, repository)
 	if err != nil {
 		return nil, err
 	}
@@ -63,16 +63,31 @@ func newGhClient(gitSource *git.Source, url *url.URL) (*GitService, error) {
 		gitSource:  gitSource,
 		client:     client,
 		repository: repository,
+		fileNames:  fileNames,
 	}, nil
 }
 
-func (s *GitService) Exists(filePath string) bool {
-	_, resp, err := s.client.RepositoryFiles.GetFile(
-		getPid(s.repository),
-		filePath,
-		&gogl.GetFileOptions{Ref: &s.repository.Branch})
+func getListOfFiles(client *gogl.Client, repository git.Repository) ([]string, error) {
+	tree, _, err := client.Repositories.ListTree(
+		getPid(repository),
+		&gogl.ListTreeOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var filenames []string
+	for _, entry := range tree {
+		filenames = append(filenames, entry.Path)
+	}
+	return filenames, nil
+}
 
-	return err == nil && resp != nil && resp.StatusCode == http.StatusOK
+func (s *GitService) Exists(filePath string) bool {
+	for _, fileName := range s.fileNames {
+		if fileName == filePath {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *GitService) GetLanguageList() ([]string, error) {
@@ -93,11 +108,6 @@ func (s *GitService) GetLanguageList() ([]string, error) {
 		sortedLangs = append(sortedLangs, reversedMap[contentSizes[i]])
 	}
 	return sortedLangs, nil
-}
-
-func getBranchRequestErrors(client *gogl.Client, repository git.Repository) error {
-	_, _, err := client.Branches.GetBranch(getPid(repository), repository.Branch)
-	return err
 }
 
 func getPid(repository git.Repository) string {

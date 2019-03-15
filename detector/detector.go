@@ -27,10 +27,25 @@ func DetectBuildEnvironments(gitSource *git.Source) (*environment.BuildEnvStats,
 			return nil, err
 		}
 	}
-	environments := detectBuildEnvironments(service)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	detectedBuildTools := make(chan *environment.DetectedBuildTool, len(environment.BuildTools))
+	go func() {
+		defer wg.Done()
+		detectBuildEnvironments(service, detectedBuildTools)
+	}()
+
 	languageList, err := service.GetLanguageList()
 	if err != nil {
 		return nil, err
+	}
+	wg.Wait()
+
+	var environments []*environment.DetectedBuildTool
+	for detectedBuildTool := range detectedBuildTools {
+		if detectedBuildTool != nil {
+			environments = append(environments, detectedBuildTool)
+		}
 	}
 
 	return &environment.BuildEnvStats{
@@ -39,8 +54,7 @@ func DetectBuildEnvironments(gitSource *git.Source) (*environment.BuildEnvStats,
 	}, nil
 }
 
-func detectBuildEnvironments(service git.Service) []*environment.DetectedBuildTool {
-	detectedBuildTools := make(chan *environment.DetectedBuildTool, len(environment.BuildTools))
+func detectBuildEnvironments(service git.Service, detectedBuildTools chan *environment.DetectedBuildTool) {
 	var wg sync.WaitGroup
 	wg.Add(len(environment.BuildTools))
 
@@ -56,13 +70,6 @@ func detectBuildEnvironments(service git.Service) []*environment.DetectedBuildTo
 
 	wg.Wait()
 	close(detectedBuildTools)
-	var result []*environment.DetectedBuildTool
-	for detectedBuildTool := range detectedBuildTools {
-		if detectedBuildTool != nil {
-			result = append(result, detectedBuildTool)
-		}
-	}
-	return result
 }
 
 func detectBuildToolFiles(service git.Service, buildTool environment.BuildTool) []string {

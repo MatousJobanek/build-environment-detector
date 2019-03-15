@@ -36,7 +36,7 @@ var Maven = BuildTool{
 var Gradle = BuildTool{
 	Name:          "Gradle",
 	Language:      "java",
-	ExpectedFiles: []string{"gradle"},
+	ExpectedFiles: []string{"*gradle*"},
 }
 
 var Golang = BuildTool{
@@ -48,5 +48,35 @@ var Golang = BuildTool{
 var Ruby = BuildTool{
 	Name:          "Ruby",
 	Language:      "ruby",
-	ExpectedFiles: []string{"Gemfile"},
+	ExpectedFiles: []string{"Gemfile", "Rakefile", "config.ru"},
+}
+
+var NodeJS = BuildTool{
+	Name:          "NodeJS",
+	Language:      "javascript",
+	ExpectedFiles: []string{"app.json", "package.json", "gulpfile.js", "Gruntfile.js"},
+}
+
+var PHP = BuildTool{
+	Name:          "PHP",
+	Language:      "php",
+	ExpectedFiles: []string{"index.php", "composer.json"},
+}
+
+var Python = BuildTool{
+	Name:          "Python",
+	Language:      "python",
+	ExpectedFiles: []string{"requirements.txt", "setup.py"},
+}
+
+var Perl = BuildTool{
+	Name:          "Perl",
+	Language:      "perl",
+	ExpectedFiles: []string{"index.pl", "cpanfile"},
+}
+
+var Dotnet = BuildTool{
+	Name:          "Dotnet",
+	Language:      "C#",
+	ExpectedFiles: []string{"project.json", "*.csproj"},
 }

@@ -2,6 +2,7 @@ package generic
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/MatousJobanek/build-environment-detector/detector/git"
 	"github.com/Sirupsen/logrus"
@@ -48,29 +49,42 @@ func NewGitService(gitSource *git.Source) (git.Service, error) {
 		return nil, err
 	}
 
-	commitIter, err := repository.CommitObjects()
-	commitToList, err := commitIter.Next()
-
-	commit, err := repository.CommitObject(commitToList.Hash)
-	if err != nil {
-		return nil, err
-	}
-
-	tree, err := commit.Tree()
+	worktree, fileNames, err := getListOfFiles(repository)
 	if err != nil {
 		return nil, err
 	}
 
 	service := &GitService{
 		repository: repository,
-		tree:       tree,
+		tree:       worktree,
+		fileNames:  fileNames,
 	}
-	tree.Files().ForEach(func(f *object.File) error {
-		service.fileNames = append(service.fileNames, f.Name)
-		return nil
-	})
 
 	return service, nil
+}
+
+func getListOfFiles(repository *gogit.Repository) (*object.Tree, []string, error) {
+	commitIter, err := repository.CommitObjects()
+	commitToList, err := commitIter.Next()
+
+	commit, err := repository.CommitObject(commitToList.Hash)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var filenames []string
+	tree.Files().ForEach(func(f *object.File) error {
+		if !strings.Contains(f.Name, "/") {
+			filenames = append(filenames, f.Name)
+		}
+		return nil
+	})
+	return tree, filenames, nil
 }
 
 func (s *GitService) Exists(filePath string) bool {
